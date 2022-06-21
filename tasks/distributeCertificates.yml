@@ -1,0 +1,132 @@
+---
+
+
+- name: Create tempfile directory for certificates
+  when: >-
+    forksComponentsConfigurationDescriptor
+    | selectattr('certs','defined') | length > 0
+  delegate_to: localhost
+  tempfile:
+    state: directory
+  register: forksCertificatesTempfileResult
+  changed_when: false
+
+- name: Create certificate temporary subdirectory
+  delegate_to: localhost
+  file:
+    path: "{{ forksCertificatesTempfileResult.path }}/{{ forksCertificateRequirementItem.certs }}"
+    state: directory
+    mode: 0700
+  loop: >-
+    {{ forksComponentsConfigurationDescriptor
+    | selectattr('certs', 'defined') }}
+  loop_control:
+    loop_var: forksCertificateRequirementItem
+
+
+- name: Find certificate files
+  become: true
+  delegate_to: "{{ sourceComponent.host }}"
+  vars:
+    sourceComponent: >-
+      {{ (forksComponentsConfigurationDescriptor
+      | selectattr('identifier', 'equalto', forksCertificateRequirementItem.certs))[0] }}
+    sourceComponentSystemUsername: >-
+      {{ ('username' in sourceComponent)
+      | ternary(sourceComponent.username, sourceComponent.fork) }}
+    sourceComponentHomeDirectory: >-
+      {{ ('home' in sourceComponent)
+      | ternary(sourceComponent.home,
+      forksUserRootDirectory + '/' + sourceComponentSystemUsername) }}
+    sourceConfigurationDirectory: >-
+      {{ sourceComponentHomeDirectory }}/{{ ('config' in sourceComponent)
+      | ternary(sourceComponent.config, '.'+sourceComponent.fork) }}
+  find:
+    paths: "{{ sourceConfigurationDirectory }}/mainnet/config/ssl/ca"
+  register: certFileFindResult
+  loop: >-
+    {{ forksComponentsConfigurationDescriptor
+    | selectattr('certs', 'defined') }}
+  loop_control:
+    loop_var: forksCertificateRequirementItem
+
+- name: Cert files
+  debug:
+    msg: "{{ certFileFindResult }}"
+
+  # r.files|map(attribute='files')
+  # sources[r.forksCertificateRequirementItem.certs] = 'X' %}
+- name: "dict of list of dict"
+  set_fact:
+    certfiles_map: |
+      [ {% for r in certFileFindResult.results %}
+      {% for f in r.files|map(attribute='path') %}
+      { 'source': '{{ r.forksCertificateRequirementItem.certs }}',
+      'path': '{{ f }}',
+      'host': '{{ r.forksCertificateRequirementItem.host }}' },
+      {% endfor %}
+      {% endfor %} ]
+- debug: 
+    msg: "{{ certfiles_map }}"
+
+
+- name: Fetch certificate files
+  become: true
+  delegate_to: "{{ forksCertificateFileItem.host }}"
+  fetch:
+    src: "{{ forksCertificateFileItem.path }}"
+    dest: "{{ forksCertificatesTempfileResult.path }}/{{ forksCertificateFileItem.source }}/"
+    flat: true
+  loop: "{{ certfiles_map }}"
+  loop_control:
+    loop_var: forksCertificateFileItem
+
+
+
+- name: Check files
+  delegate_to: localhost
+  command: "find {{ forksCertificatesTempfileResult.path }}"
+  register: findResult
+
+- name: Fetched files
+  debug:
+    msg: "{{ findResult.stdout }}"
+
+
+# - name: "Add {{ forksComponentIdentifier|capitalize }} farmer CA certs and create new client certs"
+#   when: forksComponentComponentType == 'harvester'
+#   become: true
+#   tags: certificates
+#   block:
+# 
+#     - name: "Ensure {{ forksComponentIdentifier|capitalize }} CA cert(s) local directory"
+#       become: true
+#       file:
+#         path: "{{ forksComponentHomeDirectory }}/.{{ forksComponentIdentifier }}-cacert"
+#         state: directory
+#         owner: "{{ forksComponentSystemUsername }}"
+#         group: "{{ forksComponentSystemUsername }}"
+#         mode: 0700
+# 
+#     - name: "Place {{ forksComponentIdentifier|capitalize }} CA cert(s) in local directory"
+#       vars:
+#         contextProductStoreAction: restore
+#         contextComponentIdentifier: "{{ forksComponentIdentifier }}"
+#         contextProductOrganization: "{{ forksVendorIdentifier }}"
+#         contextProductLabel: "ca_cert-{{ forkBuildRequirementsDescriptor.farmerAddress }}-{{ forksComponentIdentifier }}" #?
+#         contextProductDirectory: "{{ forksComponentHomeDirectory }}/.{{ forksComponentIdentifier }}-cacert/ca"
+#         contextSystemUser: "{{ forksComponentSystemUsername }}"
+#       include_tasks: productStore.yml
+#       
+#     - name: "Create {{ forksComponentIdentifier|capitalize }} new client certs"
+#       become_user: "{{ forksComponentSystemUsername }}"
+#       shell: >
+#         . {{ forksComponentApplicationDirectory }}/venv/bin/activate
+#         && {{ forksComponentExecutableName }} init
+#         -c {{ forksComponentHomeDirectory }}/.{{ forksComponentIdentifier }}-cacert/ca
+#       args:
+#         chdir: "{{ forksComponentApplicationDirectory }}"
+#         executable: /bin/bash
+
+
+...

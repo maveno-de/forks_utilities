@@ -1,0 +1,43 @@
+---
+
+
+- name: Remove forkstools directory
+  become: true
+  file:
+    path: "{{ forksManagingHomeDirectory|default('/root') }}/.local/opt/forktools"
+    state: directory
+    owner: "{{ forksManagingSystemUsername|default('root') }}"
+    group: "{{ forksManagingSystemUsername|default('root') }}"
+    mode: 0750
+  tags: utilities
+
+- name: Clone forktools repository
+  become: true
+  become_user: "{{ forksManagingSystemUsername|default('root') }}"
+  git:
+    repo: https://github.com/maveno-de/forktools.git
+    dest: "{{ forksManagingHomeDirectory|default('/root') }}/.local/opt/forktools"
+    force: yes
+  tags: utilities
+
+- name: Make forktools installer executable
+  become: true
+  file:
+    path: "{{ forksManagingHomeDirectory|default('/root') }}/.local/opt/forktools/installft.sh"
+    mode: u+x
+  tags: utilities
+
+- name: Setup Qwinns Forktools
+  become: true
+  become_user: "{{ forksManagingSystemUsername|default('root') }}"
+  shell: ./installft.sh
+  args:
+    executable: /bin/bash
+    chdir: "{{ forksManagingHomeDirectory|default('/root') }}/.local/opt/forktools"
+  environment:
+    FORKTOOLSBLOCKCHAINDIRS: "{{ forksManagingHomeDirectory|default('/root') }}/.local/lib/fork.blockchain.root"
+    FORKTOOLSHIDDENDIRS: "{{ forksManagingHomeDirectory|default('/root') }}/.local/lib/fork.config.root"
+  tags: utilities
+
+
+...
