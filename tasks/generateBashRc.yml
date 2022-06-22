@@ -30,14 +30,14 @@
         owner: "{{ contextSystemUsername }}"
         group: "{{ contextSystemUsername }}"
         mode: 0640
-        force: yes
+        force: true
     - template:
         src: bashrc/bashrc.ubuntu.j2
         dest: "{{ contextHomeDirectory }}/.bashrc"
         owner: "{{ contextSystemUsername }}"
         group: "{{ contextSystemUsername }}"
         mode: 0640
-        force: yes
+        force: true
 
 - name: Generate .bashrc configuration
   when: 
@@ -53,14 +53,14 @@
         owner: "{{ contextSystemUsername }}"
         group: "{{ contextSystemUsername }}"
         mode: 0640
-        force: yes
+        force: true
     - template:
         src: bashrc/bashrc.raspbian10.j2
         dest: "{{ contextHomeDirectory }}/.bashrc"
         owner: "{{ contextSystemUsername }}"
         group: "{{ contextSystemUsername }}"
         mode: 0640
-        force: yes
+        force: true
 
 - name: Generate .bashrc configuration
   when: 
@@ -76,13 +76,13 @@
         owner: "{{ contextSystemUsername }}"
         group: "{{ contextSystemUsername }}"
         mode: 0640
-        force: yes
+        force: true
     - template:
         src: bashrc/bashrc.centos8.j2
         dest: "{{ contextHomeDirectory }}/.bashrc"
         owner: "{{ contextSystemUsername }}"
         group: "{{ contextSystemUsername }}"
         mode: 0640
-        force: yes
+        force: true
 
 ...

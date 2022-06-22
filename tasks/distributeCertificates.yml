@@ -3,7 +3,7 @@
 
 - name: Create tempfile directory for certificates
   when: >-
-    forksComponentsConfigurationDescriptor
+    forksComponentsConfiguration
     | selectattr('certs','defined') | length > 0
   delegate_to: localhost
   tempfile:
@@ -18,7 +18,7 @@
     state: directory
     mode: 0700
   loop: >-
-    {{ forksComponentsConfigurationDescriptor
+    {{ forksComponentsConfiguration
     | selectattr('certs', 'defined') }}
   loop_control:
     loop_var: forksCertificateRequirementItem
@@ -29,7 +29,7 @@
   delegate_to: "{{ sourceComponent.host }}"
   vars:
     sourceComponent: >-
-      {{ (forksComponentsConfigurationDescriptor
+      {{ (forksComponentsConfiguration
       | selectattr('identifier', 'equalto', forksCertificateRequirementItem.certs))[0] }}
     sourceComponentSystemUsername: >-
       {{ ('username' in sourceComponent)
@@ -45,7 +45,7 @@
     paths: "{{ sourceConfigurationDirectory }}/mainnet/config/ssl/ca"
   register: certFileFindResult
   loop: >-
-    {{ forksComponentsConfigurationDescriptor
+    {{ forksComponentsConfiguration
     | selectattr('certs', 'defined') }}
   loop_control:
     loop_var: forksCertificateRequirementItem
@@ -100,10 +100,10 @@
 #     - name: "Ensure {{ forksComponentIdentifier|capitalize }} CA cert(s) local directory"
 #       become: true
 #       file:
-#         path: "{{ forksComponentHomeDirectory }}/.{{ forksComponentIdentifier }}-cacert"
+#         path: "{{ forksNodeHomeDirectory }}/.{{ forksComponentIdentifier }}-cacert"
 #         state: directory
-#         owner: "{{ forksComponentSystemUsername }}"
-#         group: "{{ forksComponentSystemUsername }}"
+#         owner: "{{ forksNodeSystemUsername }}"
+#         group: "{{ forksNodeSystemUsername }}"
 #         mode: 0700
 # 
 #     - name: "Place {{ forksComponentIdentifier|capitalize }} CA cert(s) in local directory"
@@ -112,45 +112,47 @@
 #         contextComponentIdentifier: "{{ forksComponentIdentifier }}"
 #         contextProductOrganization: "{{ forksVendorIdentifier }}"
 #         contextProductLabel: "ca_cert-{{ forkBuildRequirementsDescriptor.farmerAddress }}-{{ forksComponentIdentifier }}" #?
-#         contextProductDirectory: "{{ forksComponentHomeDirectory }}/.{{ forksComponentIdentifier }}-cacert/ca"
-#         contextSystemUser: "{{ forksComponentSystemUsername }}"
+#         contextProductDirectory: "{{ forksNodeHomeDirectory }}/.{{ forksComponentIdentifier }}-cacert/ca"
+#         contextSystemUser: "{{ forksNodeSystemUsername }}"
 #       include_tasks: productStore.yml
 
 - name: "Create {{ forksComponentIdentifier|capitalize }} new client certs"
   when: forksComponentBuildOption == 'git'
-  become_user: "{{ forksComponentSystemUsername }}"
+  become_user: "{{ forksNodeSystemUsername }}"
   vars:
     forksComponentIdentifier: >-
       {{ forksComponentItem.identifier }}
-    forksComponentSystemUsername: >-
+    forksComponentForkIdentifier: >-
+      {{ forksComponentItem.fork }}
+    forksNodeSystemUsername: >-
       {{ ('username' in forksComponentItem)
       | ternary(forksComponentItem.username, forksComponentIdentifier) }}
-    forksComponentHomeDirectory: >-
+    forksNodeHomeDirectory: >-
       {{ ('home' in forksComponentItem)
       | ternary(forksComponentItem.home,
-      forksUserRootDirectory + '/' + forksComponentSystemUsername) }}
-    forksComponentRepositoryIdentifier: >-
-      {{ forksRepositoryIdentifierLookupTable[forksComponentIdentifier] }}
-    forksComponentApplicationDirectoryName: >-
-      {{ forksComponentRepositoryIdentifier
+      forksUserRootDirectory + '/' + forksNodeSystemUsername) }}
+    forksNodeRepositoryIdentifier: >-
+      {{ forksRepositoryIdentifierLookupTable[forksComponentForkIdentifier] }}
+    forksNodeApplicationDirectoryName: >-
+      {{ forksNodeRepositoryIdentifier
       | regex_search('[^/]+$') }}
-    forksComponentApplicationDirectory: >-
-      {{ forksComponentHomeDirectory }}/.local/share/{{ forksComponentApplicationDirectoryName }}
-    forksComponentExecutableName: >-
+    forksNodeApplicationDirectory: >-
+      {{ forksNodeHomeDirectory }}/.local/share/{{ forksNodeApplicationDirectoryName }}
+    forksNodeExecutableName: >-
       {{ ('executable' in forksComponentItem)
       | ternary(forksComponentItem.executable, forksComponentIdentifier) }}
     forksComponentBuildOption: >-
       {{ ('build' in forksComponentItem)
       | ternary(forksComponentItem.build, 'git') }}
   shell: >
-    . {{ forksComponentApplicationDirectory }}/venv/bin/activate
-    && {{ forksComponentExecutableName }} init
+    . {{ forksNodeApplicationDirectory }}/venv/bin/activate
+    && {{ forksNodeExecutableName }} init
     -c {{ forksCertificatesTempfileResult.path }}/{{ forksComponentIdentifier }}
   args:
-    chdir: "{{ forksComponentApplicationDirectory }}"
+    chdir: "{{ forksNodeApplicationDirectory }}"
     executable: /bin/bash
   loop: >-
-    {{ forksComponentsConfigurationDescriptor
+    {{ forksComponentsConfiguration
     | selectattr('certs', 'defined') }}
   loop_control:
     loop_var: forksComponentItem

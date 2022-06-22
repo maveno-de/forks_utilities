@@ -17,7 +17,7 @@
   git:
     repo: https://github.com/maveno-de/forktools.git
     dest: "{{ forksManagingHomeDirectory|default('/root') }}/.local/opt/forktools"
-    force: yes
+    force: true
   tags: utilities
 
 - name: Make forktools installer executable
