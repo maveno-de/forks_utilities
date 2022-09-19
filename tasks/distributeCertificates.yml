@@ -1,6 +1,8 @@
 ---
 
 
+# [forksUtilsCaFilesDeployMode] # replace|temp|remove
+
 - name: Create tempfile directory for certificates
   when: >-
     forksComponentsConfiguration
@@ -10,150 +12,317 @@
     state: directory
   register: forksCertificatesTempfileResult
   changed_when: false
+  run_once: true
 
-- name: Create certificate temporary subdirectory
+- name: Create certificate temporary subdirectories
   delegate_to: localhost
   file:
-    path: "{{ forksCertificatesTempfileResult.path }}/{{ forksCertificateRequirementItem.certs }}"
+    path: "{{ forksCertificatesTempfileResult.path }}/{{ forksCertificateRequirementItem }}"
     state: directory
     mode: 0700
   loop: >-
     {{ forksComponentsConfiguration
-    | selectattr('certs', 'defined') }}
+    | selectattr('certs', 'defined')
+    | map(attribute='certs') | list | unique }}
   loop_control:
     loop_var: forksCertificateRequirementItem
+  run_once: true
 
 
 - name: Find certificate files
+  when: sourceComponent.host == inventory_hostname
   become: true
   delegate_to: "{{ sourceComponent.host }}"
   vars:
     sourceComponent: >-
       {{ (forksComponentsConfiguration
-      | selectattr('identifier', 'equalto', forksCertificateRequirementItem.certs))[0] }}
+      | selectattr('identifier', 'equalto', forksCertificateRequirementItem))[0] }}
     sourceComponentSystemUsername: >-
       {{ ('username' in sourceComponent)
-      | ternary(sourceComponent.username, sourceComponent.fork) }}
+      | ternary(sourceComponent['username']|default(''), sourceComponent.identifier) }}
     sourceComponentHomeDirectory: >-
       {{ ('home' in sourceComponent)
-      | ternary(sourceComponent.home,
-      forksUserRootDirectory + '/' + sourceComponentSystemUsername) }}
+      | ternary(sourceComponent['home']|default(''),
+      ('username' in sourceComponent)
+      | ternary(forksUserRootDirectory + '/' + sourceComponent['username']|default(''),
+      forksUserRootDirectory + '/' + sourceComponent.identifier )) }}
     sourceConfigurationDirectory: >-
-      {{ sourceComponentHomeDirectory }}/{{ ('config' in sourceComponent)
-      | ternary(sourceComponent.config, '.'+sourceComponent.fork) }}
+      {{ sourceComponentHomeDirectory }}/{{ ('configDirectory' in sourceComponent)
+      | ternary(sourceComponent.configDirectory, '.'+sourceComponent.fork) }}
   find:
     paths: "{{ sourceConfigurationDirectory }}/mainnet/config/ssl/ca"
   register: certFileFindResult
   loop: >-
     {{ forksComponentsConfiguration
-    | selectattr('certs', 'defined') }}
+    | selectattr('certs', 'defined')
+    | map(attribute='certs') | list | unique }}
   loop_control:
     loop_var: forksCertificateRequirementItem
 
+
 - name: Cert files
+  when: forksUtilsDebugLevel|int > 1
   debug:
     msg: "{{ certFileFindResult }}"
 
-- name: Convert dict
-  set_fact:
-    certfiles_map: |
-      [ {% for r in certFileFindResult.results %}
-      {% for f in r.files|map(attribute='path') %}
-      { 'source': '{{ r.forksCertificateRequirementItem.certs }}',
-      'path': '{{ f }}',
-      'host': '{{ r.forksCertificateRequirementItem.host }}' },
-      {% endfor %}
-      {% endfor %} ]
-- debug: 
-    msg: "{{ certfiles_map }}"
-
 
 - name: Fetch certificate files
+  when: not certFileFindResult.skipped
   become: true
-  delegate_to: "{{ forksCertificateFileItem.host }}"
   fetch:
     src: "{{ forksCertificateFileItem.path }}"
-    dest: "{{ forksCertificatesTempfileResult.path }}/{{ forksCertificateFileItem.source }}/"
+    dest: >-
+      {{ forksCertificatesTempfileResult.path }}/{{
+      certFileFindResult.results.0.forksCertificateRequirementItem }}/
     flat: true
-  loop: "{{ certfiles_map }}"
+  loop: "{{ certFileFindResult.results.0.files }}"
   loop_control:
     loop_var: forksCertificateFileItem
 
+  #RESULT: fetchedCertFileFindResult.files|map(attribute='path')|list  << |select('contains', '/<Source Node Identifier>/')
+- name: Find fetched certificate files
+  delegate_to: localhost
+  become: true
+  find:
+    paths: "{{ forksCertificatesTempfileResult.path }}"
+    recurse: true
+  register: fetchedCertFileFindResult
+  run_once: true
+
+- name: Fetched certificate files
+  when: forksUtilsDebugLevel|int > 1
+  delegate_to: localhost
+  debug:
+    msg: "{{ fetchedCertFileFindResult.files|map(attribute='path')|list }}"
+  run_once: true
+
+- name: Fetched certificate files source node identifierts
+  when: forksUtilsDebugLevel|int > 1
+  delegate_to: localhost
+  debug:
+    msg: "{{ certFileItem.split('/')[3] }}"
+  run_once: true
+  loop: "{{ fetchedCertFileFindResult.files|map(attribute='path')|list }}"
+  loop_control:
+    loop_var: certFileItem
+
+
+- name: Create tempfile directories for certificates on target hosts
+  when: forksUtilsCaFilesDeployMode != 'replace'
+  become: true
+  become_user: "{{ targetUsernameItem }}"
+  vars:
+    targetComponentList: >-
+      {{ forksComponentsConfiguration
+      | selectattr('host', 'equalto', inventory_hostname)
+      | selectattr('certs', 'defined') }}
+    targetUsernameList: >-
+      {{ targetComponentList
+      | selectattr('username', 'defined')
+      | map(attribute='username') | list
+      + targetComponentList
+      | rejectattr('username', 'defined')
+      | map(attribute='identifier') | list }}
+  tempfile:
+    state: directory
+  register: forksCertificatesDeployedTempfileResult
+  changed_when: false
+  loop: "{{ targetUsernameList }}"
+  loop_control:
+    loop_var: targetUsernameItem
+
+
+- name: Target tempfiles
+  when:
+    - forksUtilsDebugLevel|int > 1
+    - forksUtilsCaFilesDeployMode != 'replace'
+  debug:
+    msg: "{{ forksCertificatesDeployedTempfileResult }}"
+
+- name: Cert files / target directories cartesian product
+  when:
+    - forksUtilsDebugLevel|int > 2
+    - forksUtilsCaFilesDeployMode != 'replace'
+  debug:
+    msg: >-
+      {{ lookup('community.general.cartesian',
+      fetchedCertFileFindResult.files
+      | map(attribute='path')|list,
+      forksComponentsConfiguration
+      | selectattr('certs', 'defined') | list) }}
+
+
+- name: Copy certificate files to target hosts
+  when: targetHost == inventory_hostname
+  become: true
+  vars:
+    targetNode: "{{ forksComponentCertCartesianItem[1] }}"
+    targetHost: "{{ targetNode['host'] }}"
+    targetUsername: >-
+      {{ ('username' in targetNode.keys())
+      | ternary( targetNode['username']|default(''),
+      targetNode['identifier'] ) }}
+    targetHomeDirectory: >-
+      {{ ('home' in targetNode)
+      | ternary(targetNode['home']|default(''),
+      ('username' in targetNode)
+      | ternary(forksUserRootDirectory + '/' + targetNode['username']|default(''),
+      forksUserRootDirectory + '/' + targetNode['identifier'] )) }}
+    targetConfigurationDirectory: >-
+      {{ targetHomeDirectory }}/{{ ('configDirectory' in targetNode)
+      | ternary(targetNode['configDirectory']|default(''), '.'+targetNode.fork) }}
+    tempTargetPath: >-
+      {{ (forksCertificatesDeployedTempfileResult.results
+      | selectattr('owner', 'defined')
+      | selectattr('owner', 'equalto', targetUsername))[0]['path']|default('') }}
+    caTargetPath: >-
+      {{ targetHomeDirectory + '/' + ('configDirectory' in targetNode.keys())
+      | ternary(targetNode['configDirectory']|default(''), '.'+targetNode.fork) }}
+    targetPath: >-
+      {{ (forksUtilsCaFilesDeployMode != 'replace')
+      | ternary(tempTargetPath, caTargetPath) }}
+  copy:
+    src: "{{ forksComponentCertCartesianItem[0] }}"
+    dest: "{{ targetPath }}"
+    owner: "{{ targetUsername }}"
+    group: "{{ targetUsername }}"
+    mode: 0600
+  loop: >-
+    {{ lookup('community.general.cartesian',
+    fetchedCertFileFindResult.files
+    | map(attribute='path')|list,
+    forksComponentsConfiguration
+    | selectattr('certs', 'defined') | list) }}
+  loop_control:
+    loop_var: forksComponentCertCartesianItem
 
 
 - name: Check files
-  delegate_to: localhost
-  command: "find {{ forksCertificatesTempfileResult.path }}"
+  when: forksUtilsDebugLevel|int > 1
+  command: "find {{ deployedTempfileResultItem.path }}"
   register: findResult
+  loop: "{{ forksCertificatesDeployedTempfileResult.results }}"
+  loop_control:
+    loop_var: deployedTempfileResultItem
 
 - name: Fetched files
+  when: forksUtilsDebugLevel|int > 1
   debug:
-    msg: "{{ findResult.stdout }}"
+    msg: "{{ findResult }}"
 
 
-# - name: "Add {{ forksComponentIdentifier|capitalize }} farmer CA certs and create new client certs"
-#   when: forksComponentComponentType == 'harvester'
-#   become: true
-#   tags: certificates
-#   block:
-# 
-#     - name: "Ensure {{ forksComponentIdentifier|capitalize }} CA cert(s) local directory"
-#       become: true
-#       file:
-#         path: "{{ forksNodeHomeDirectory }}/.{{ forksComponentIdentifier }}-cacert"
-#         state: directory
-#         owner: "{{ forksNodeSystemUsername }}"
-#         group: "{{ forksNodeSystemUsername }}"
-#         mode: 0700
-# 
-#     - name: "Place {{ forksComponentIdentifier|capitalize }} CA cert(s) in local directory"
-#       vars:
-#         contextProductStoreAction: restore
-#         contextComponentIdentifier: "{{ forksComponentIdentifier }}"
-#         contextProductOrganization: "{{ forksVendorIdentifier }}"
-#         contextProductLabel: "ca_cert-{{ forkBuildRequirementsDescriptor.farmerAddress }}-{{ forksComponentIdentifier }}" #?
-#         contextProductDirectory: "{{ forksNodeHomeDirectory }}/.{{ forksComponentIdentifier }}-cacert/ca"
-#         contextSystemUser: "{{ forksNodeSystemUsername }}"
-#       include_tasks: productStore.yml
-
-- name: "Create {{ forksComponentIdentifier|capitalize }} new client certs"
-  when: forksComponentBuildOption == 'git'
+- name: Create new client certs
+  when:
+    - forksComponentBuildOption == 'git'
+    - forksComponentHost == inventory_hostname 
+  become: true
   become_user: "{{ forksNodeSystemUsername }}"
   vars:
     forksComponentIdentifier: >-
-      {{ forksComponentItem.identifier }}
+      {{ forksComponentCertItem.identifier }}
+    forksComponentHost: >-
+      {{ forksComponentCertItem.host }}
     forksComponentForkIdentifier: >-
-      {{ forksComponentItem.fork }}
+      {{ forksComponentCertItem.fork }}
     forksNodeSystemUsername: >-
-      {{ ('username' in forksComponentItem)
-      | ternary(forksComponentItem.username, forksComponentIdentifier) }}
+      {{ ('username' in forksComponentCertItem)
+      | ternary(forksComponentCertItem['username']|default(''), forksComponentIdentifier) }}
     forksNodeHomeDirectory: >-
-      {{ ('home' in forksComponentItem)
-      | ternary(forksComponentItem.home,
-      forksUserRootDirectory + '/' + forksNodeSystemUsername) }}
-    forksNodeRepositoryIdentifier: >-
-      {{ forksRepositoryIdentifierLookupTable[forksComponentForkIdentifier] }}
-    forksNodeApplicationDirectoryName: >-
-      {{ forksNodeRepositoryIdentifier
-      | regex_search('[^/]+$') }}
-    forksNodeApplicationDirectory: >-
-      {{ forksNodeHomeDirectory }}/.local/share/{{ forksNodeApplicationDirectoryName }}
+      {{ ('home' in forksComponentCertItem)
+      | ternary(forksComponentCertItem['home']|default(''),
+      ('username' in forksComponentCertItem)
+      | ternary(forksUserRootDirectory + '/' + forksComponentCertItem['username']|default(''),
+      forksUserRootDirectory + '/' + forksComponentIdentifier )) }}
     forksNodeExecutableName: >-
-      {{ ('executable' in forksComponentItem)
-      | ternary(forksComponentItem.executable, forksComponentIdentifier) }}
+      {{ ('executable' in forksComponentCertItem)
+      | ternary(forksComponentCertItem['executable']|default(''), forksComponentForkIdentifier) }}
     forksComponentBuildOption: >-
-      {{ ('build' in forksComponentItem)
-      | ternary(forksComponentItem.build, 'git') }}
+      {{ ('build' in forksComponentCertItem)
+      | ternary(forksComponentCertItem['build']|default(''), 'git') }}
+    tempCertPath: >-
+      {{ (forksCertificatesDeployedTempfileResult.results
+      | selectattr('owner', 'defined')
+      | selectattr('owner', 'equalto', forksNodeSystemUsername))[0]['path']|default('') }}
+    caCertPath: >-
+      {{ forksNodeHomeDirectory+'/'+('configDirectory' in forksComponentCertItem.keys())
+      | ternary(forksComponentCertItem['configDirectory']|default(''), '.'+forksComponentForkIdentifier) }}
+    certPath: >-
+      {{ (forksUtilsCaFilesDeployMode != 'replace')
+      | ternary(tempCertPath, caCertPath) }}
   shell: >
-    . {{ forksNodeApplicationDirectory }}/venv/bin/activate
-    && {{ forksNodeExecutableName }} init
-    -c {{ forksCertificatesTempfileResult.path }}/{{ forksComponentIdentifier }}
+    . .bashrc &&
+    {{ forksNodeExecutableName }} init
+    -c {{ certPath }}
   args:
-    chdir: "{{ forksNodeApplicationDirectory }}"
+    chdir: "{{ forksNodeHomeDirectory }}"
     executable: /bin/bash
   loop: >-
     {{ forksComponentsConfiguration
     | selectattr('certs', 'defined') }}
+  loop_control:
+    loop_var: forksComponentCertItem
+
+
+  #HINT: Node won't start anymore...
+- name: Remove cert CA files
+  when:
+    - forksUtilsCaFilesDeployMode == 'remove'
+    - forksComponentBuildOption == 'git'
+    - forksComponentHost == inventory_hostname
+  become: true
+  become_user: "{{ forksNodeSystemUsername }}"
+  vars:
+    forksComponentIdentifier: >-
+      {{ forksComponentCertItem.identifier }}
+    forksComponentForkIdentifier: >-
+      {{ forksComponentCertItem.fork }}
+    forksComponentHost: >-
+      {{ forksComponentCertItem.host }}
+    forksNodeSystemUsername: >-
+      {{ ('username' in forksComponentCertItem)
+      | ternary(forksComponentCertItem['username']|default(''), forksComponentIdentifier) }}
+    forksNodeHomeDirectory: >-
+      {{ ('home' in forksComponentCertItem)
+      | ternary(forksComponentCertItem['home']|default(''),
+      ('username' in forksComponentCertItem)
+      | ternary(forksUserRootDirectory + '/' + forksComponentCertItem['username']|default(''),
+      forksUserRootDirectory + '/' + forksComponentIdentifier )) }}
+    forksComponentBuildOption: >-
+      {{ ('build' in forksComponentCertItem)
+      | ternary(forksComponentCertItem['build']|default(''), 'git') }}
+    certPath: >-
+      {{ forksNodeHomeDirectory+'/'+('configDirectory' in forksComponentCertItem.keys())
+      | ternary(forksComponentCertItem['configDirectory']
+      | default(''), '.'+forksComponentForkIdentifier) }}/mainnet/config/ssl/ca
+  file:
+    path: "{{ certPath }}"
+    state: absent
+  loop: >-
+    {{ forksComponentsConfiguration
+    | selectattr('certs', 'defined') }}
+  loop_control:
+    loop_var: forksComponentCertItem
+
+
+- name: Restart Forks services
+  become: true
+  vars:
+    forksNodeEnabled: >-
+      {{ ('enabled' in forksComponentItem)
+      | ternary(forksComponentItem.enabled, true) }}
+    forksNodeServiceName: >-
+      {{ ('serviceName' in forksComponentItem)
+      | ternary(forksComponentItem['serviceName'],
+      forksComponentItem['fork']) }}
+  systemd:
+    name: "{{ forksNodeServiceName }}.service"
+    daemon-reload: yes
+    enabled: "{{ forksNodeEnabled }}"
+    state: "{{ forksNodeEnabled|ternary('restarted', 'stopped') }}"
+  changed_when: false
+  loop: >-
+    {{ forksComponentsConfiguration
+    | selectattr('host', 'equalto', inventory_hostname) }}
   loop_control:
     loop_var: forksComponentItem
 
