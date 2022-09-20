@@ -3,6 +3,34 @@
 
 # [forksUtilsCaFilesDeployMode] # replace|temp|remove
 
+
+- name: Ensure remote temp dir for ansible
+  become: true
+  vars:
+    forksNodeSystemUsername: >-
+      {{ ('username' in forksCertificateRequirementNodeItem)
+      | ternary(forksCertificateRequirementNodeItem['username']|default(''),
+      forksCertificateRequirementNodeItem.identifier) }}
+    forksNodeHomeDirectory: >-
+      {{ ('home' in forksCertificateRequirementNodeItem)
+      | ternary(forksCertificateRequirementNodeItem['home']|default(''),
+      ('username' in forksCertificateRequirementNodeItem)
+      | ternary(forksUserRootDirectory + '/' + forksCertificateRequirementNodeItem['username']|default(''),
+      forksUserRootDirectory + '/' + forksCertificateRequirementNodeItem.identifier )) }}
+  file:
+    path: "{{ forksNodeHomeDirectory }}/.ansible/tmp"
+    state: directory
+    owner: "{{ forksNodeSystemUsername }}"
+    group: "{{ forksNodeSystemUsername }}"
+    mode: 0700
+  loop: >-
+    {{ forksComponentsConfiguration
+    | selectattr('host', 'equalto', inventory_hostname)
+    | selectattr('certs', 'defined') | list }}
+  loop_control:
+    loop_var: forksCertificateRequirementNodeItem
+
+
 - name: Create tempfile directory for certificates
   when: >-
     forksComponentsConfiguration
@@ -311,9 +339,9 @@
       {{ ('enabled' in forksComponentItem)
       | ternary(forksComponentItem.enabled, true) }}
     forksNodeServiceName: >-
-      {{ ('serviceName' in forksComponentItem)
-      | ternary(forksComponentItem['serviceName'],
-      forksComponentItem['fork']) }}
+      {{ ('serviceName' in forksComponentItem.keys())
+      | ternary(forksComponentItem['serviceName']|default(''),
+      forksComponentItem['identifier']) }}
   systemd:
     name: "{{ forksNodeServiceName }}.service"
     daemon-reload: yes
