@@ -353,6 +353,7 @@
     | selectattr('host', 'equalto', inventory_hostname) }}
   loop_control:
     loop_var: forksComponentItem
+  tags: patches
 
 
 ...
