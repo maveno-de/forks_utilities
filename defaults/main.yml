@@ -5,7 +5,5 @@ forksDefaultBranch: main
 
 forksUtilsDebugLevel: 1
 
-forksUtilsCaFilesDeployMode: temp
-
 
 ...
