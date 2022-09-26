@@ -200,7 +200,7 @@
     group: "{{ targetUsername }}"
     mode: 0600
   loop: >-
-    {{ lookup('community.general.cartesian',
+    {{ q('community.general.cartesian',
     fetchedCertFileFindResult.files
     | map(attribute='path')|list,
     forksComponentsConfiguration
