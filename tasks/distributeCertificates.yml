@@ -15,8 +15,8 @@
       {{ ('home' in forksCertificateRequirementNodeItem)
       | ternary(forksCertificateRequirementNodeItem['home']|default(''),
       ('username' in forksCertificateRequirementNodeItem)
-      | ternary(forksUserRootDirectory + '/' + forksCertificateRequirementNodeItem['username']|default(''),
-      forksUserRootDirectory + '/' + forksCertificateRequirementNodeItem.identifier )) }}
+      | ternary(forksUsersRootDirectory + '/' + forksCertificateRequirementNodeItem['username']|default(''),
+      forksUsersRootDirectory + '/' + forksCertificateRequirementNodeItem.identifier )) }}
   file:
     path: "{{ forksNodeHomeDirectory }}/.ansible/tmp"
     state: directory
@@ -74,8 +74,8 @@
       {{ ('home' in sourceComponent)
       | ternary(sourceComponent['home']|default(''),
       ('username' in sourceComponent)
-      | ternary(forksUserRootDirectory + '/' + sourceComponent['username']|default(''),
-      forksUserRootDirectory + '/' + sourceComponent.identifier )) }}
+      | ternary(forksUsersRootDirectory + '/' + sourceComponent['username']|default(''),
+      forksUsersRootDirectory + '/' + sourceComponent.identifier )) }}
     sourceConfigurationDirectory: >-
       {{ sourceComponentHomeDirectory }}/{{ (forksPropertiesLookupTable is defined
       and sourceComponentForkIdentifier in forksPropertiesLookupTable.keys()
@@ -243,8 +243,8 @@
       {{ ('home' in forksComponentCertItem)
       | ternary(forksComponentCertItem['home']|default(''),
       ('username' in forksComponentCertItem)
-      | ternary(forksUserRootDirectory + '/' + forksComponentCertItem['username']|default(''),
-      forksUserRootDirectory + '/' + forksComponentIdentifier )) }}
+      | ternary(forksUsersRootDirectory + '/' + forksComponentCertItem['username']|default(''),
+      forksUsersRootDirectory + '/' + forksComponentIdentifier )) }}
     forksNodeExecutableName: >-
       {{ (forksPropertiesLookupTable is defined
       and forksComponentForkIdentifier in forksPropertiesLookupTable.keys()
