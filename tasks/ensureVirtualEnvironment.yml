@@ -1,0 +1,30 @@
+---
+
+
+# [forksVenvPackages]
+
+- name: Ensure Forks Python Venv directory
+  when: forksManagingSystemUsername|default('root') != 'root'
+  become: true
+  file:
+    path: "{{ forksVenvDirectory }}"
+    state: directory
+    owner: "{{ forksManagingSystemUsername|default('root') }}"
+    group: "{{ forksManagingSystemUsername|default('root') }}"
+    mode: 0755
+
+  # HINT: Latest flag used to update pip when not current version
+- name: Install Forks Python Venv 
+  # noqa package-latest
+  become: true
+  pip:
+    virtualenv: "{{ forksVenvDirectory }}"
+    state: latest
+    name: "{{ ['pip'] + forksVenvPackages|default([]) }}"
+
+- name: Switch to Python virtual environment of framework service
+  set_fact:
+    ansible_python_interpreter: "{{ forksVenvInterpreterPath }}"
+
+
+...
