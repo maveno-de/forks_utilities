@@ -2,6 +2,6 @@
 - name: Converge
   hosts: all
   tasks:
-    - name: "Include forks_utilities"
+    - name: "Include utilities"
       include_role:
-        name: "forks_utilities"
+        name: maveno_de.forks.utilities
