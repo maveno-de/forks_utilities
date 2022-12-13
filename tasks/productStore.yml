@@ -219,8 +219,8 @@
       file:
         state: directory
         path: "{{ forksManagingHomeDirectory|default('/root') }}/.tmp/product/"
-        owner: "{{ forksManagingSystemUsername|default('root') }}"
-        group: "{{ forksManagingSystemUsername|default('root') }}"
+        owner: "{{ forksManagingSystemUsername | default('root') }}"
+        group: "{{ forksManagingSystemUsername | default('root') }}"
         mode: 0700
 
     - name: Gzipping directory
@@ -229,13 +229,13 @@
         path: "{{ contextProductDirectory }}"
         dest: "{{ forksManagingHomeDirectory|default('/root') }}/.tmp/product/{{ productTarGzArchiveName }}"
         format: gz
-        owner: "{{ forksManagingSystemUsername|default('root') }}"
-        group: "{{ forksManagingSystemUsername|default('root') }}"
+        owner: "{{ forksManagingSystemUsername | default('root') }}"
+        group: "{{ forksManagingSystemUsername | default('root') }}"
         mode: 0700
 
     - name: Fetch zipped file/directory
       become: true
-      become_user: "{{ forksManagingSystemUsername|default('root') }}"
+      become_user: "{{ forksManagingSystemUsername | default('root') }}"
       fetch:
         src: "{{ forksManagingHomeDirectory|default('/root') }}/.tmp/product/{{ productTarGzArchiveName }}"
         dest: "{{ productFileDirectory }}/files/{{ productTarGzArchiveName }}"

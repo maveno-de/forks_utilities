@@ -4,13 +4,13 @@
 # [forksVenvPackages]
 
 - name: Ensure Forks Python Venv directory
-  when: forksManagingSystemUsername|default('root') != 'root'
+  when: forksManagingSystemUsername | default('root') != 'root'
   become: true
   file:
     path: "{{ forksVenvDirectory }}"
     state: directory
-    owner: "{{ forksManagingSystemUsername|default('root') }}"
-    group: "{{ forksManagingSystemUsername|default('root') }}"
+    owner: "{{ forksManagingSystemUsername | default('root') }}"
+    group: "{{ forksManagingSystemUsername | default('root') }}"
     mode: 0755
 
   # HINT: Latest flag used to update pip when not current version
