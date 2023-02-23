@@ -20,7 +20,7 @@
   pip:
     virtualenv: "{{ forksVenvDirectory }}"
     state: latest
-    name: "{{ ['pip'] + forksVenvPackages|default([]) }}"
+    name: "{{ forksVenvPackages | default([]) }}"
 
 - name: Switch to Python virtual environment of framework service
   set_fact:
