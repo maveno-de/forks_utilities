@@ -218,7 +218,7 @@
       become: true
       file:
         state: directory
-        path: "{{ forksManagingHomeDirectory|default('/root') }}/.tmp/product/"
+        path: "{{ forksManagingHomeDirectory | default('/root') }}/.tmp/product/"
         owner: "{{ forksManagingSystemUsername | default('root') }}"
         group: "{{ forksManagingSystemUsername | default('root') }}"
         mode: 0700
@@ -227,7 +227,7 @@
       become: true
       archive:
         path: "{{ contextProductDirectory }}"
-        dest: "{{ forksManagingHomeDirectory|default('/root') }}/.tmp/product/{{ productTarGzArchiveName }}"
+        dest: "{{ forksManagingHomeDirectory | default('/root') }}/.tmp/product/{{ productTarGzArchiveName }}"
         format: gz
         owner: "{{ forksManagingSystemUsername | default('root') }}"
         group: "{{ forksManagingSystemUsername | default('root') }}"
@@ -237,7 +237,7 @@
       become: true
       become_user: "{{ forksManagingSystemUsername | default('root') }}"
       fetch:
-        src: "{{ forksManagingHomeDirectory|default('/root') }}/.tmp/product/{{ productTarGzArchiveName }}"
+        src: "{{ forksManagingHomeDirectory | default('/root') }}/.tmp/product/{{ productTarGzArchiveName }}"
         dest: "{{ productFileDirectory }}/files/{{ productTarGzArchiveName }}"
         flat: yes
 
@@ -272,7 +272,7 @@
       become: true
       file:
         state: absent
-        path: "{{ forksManagingHomeDirectory|default('/root') }}/.tmp/product"
+        path: "{{ forksManagingHomeDirectory | default('/root') }}/.tmp/product"
 
 
   ## Restore directory/file
