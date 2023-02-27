@@ -1,0 +1,39 @@
+---
+
+
+# forksUtilsContextTransporterSourceDirectory
+# forksUtilsContextTransporterTargetDirectories
+
+- name: Generate plot transporter script
+  template:
+    src: plot_transporter.sh.j2
+    dest: "{{ forksUtilsContextTransporterHomeDirectory }}/.local/bin/plot_transporter.sh.j2"
+    owner: "{{ forksUtilsContextTransporterSystemUsername }}"
+    group: "{{ forksUtilsContextTransporterSystemUsername }}"
+    mode: 0750
+    force: true
+
+- name: Add home env var to crontab
+  become: true
+  cron:
+    name: HOME
+    user: "{{ forksUtilsContextTransporterSystemUsername }}"
+    env: yes
+    job: "{{ forksUtilsContextTransporterHomeDirectory }}"
+
+- name: Add cronjob for execution of plot transporter
+  become: true
+  cron:
+    name: Forks Plot transporter
+    user: "{{ forksUtilsContextTransporterSystemUsername }}"
+    job: "{{ forksUtilsContextTransporterHomeDirectory }}/.local/bin/plot_transporter.sh 1>/dev/null 2>&1"
+
+- name: Adding alias for plot transporter to managing user .bashrc file
+  become: true
+  lineinfile:
+    path: "{{ forksManagingHomeDirectory | default('/root') }}/.bashrc"
+    line: alias plot_transport="{{ forksUtilsContextTransporterHomeDirectory }}/.local/bin/plot_transporter.sh"
+    insertafter: '^#NON-INTERACTIVE$'
+
+
+...

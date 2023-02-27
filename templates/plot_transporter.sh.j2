@@ -1,0 +1,70 @@
+#! /bin/bash
+
+SOURCE_DIRECTORY="{{ forksUtilsContextTransporterSourceDirectory }}"
+
+TARGET_DIRECTORIES=(
+{% for targetDirectory in forksUtilsContextTransporterTargetDirectories %}
+    "{{ targetDirectory }}"{% endfor %}
+
+)
+
+#CONCURRENT_TRANSPORTS_LIMIT=2
+#TRANSFER_RATE_LIMIT=40M
+
+STATE_DIRECTORY=$HOME/.local/run
+
+findReadyPlot() {
+    IFS=$'\n'
+    plotFilePaths=($(find "$SOURCE_DIRECTORY" -name 'plot*.plot'))
+    unset IFS
+    for plot in "${plotFilePaths[@]}"
+    do
+        [[ $(isTransportInProgress "${plot}") == 0 ]] && echo "${plot}" && exit 0
+    done
+    exit 0
+}
+
+transportPlot() {
+    touch "${STATE_DIRECTORY}/.plotTransport${3}"
+    echo "Starting transport of ${1} to ${2}"
+    [[ -z $TRANSFER_RATE_LIMIT ]] && unset bwLimitParam \
+        || bwLimitParam="--bwlimit=$TRANSFER_RATE_LIMIT"
+    nice -n 19 rsync -av --partial --append --remove-source-files \
+        ${bwLimitParam} "${1}" "${2}/" 1>/dev/null 2>&1
+    echo "Transport of ${1} to ${2} has finished"
+    rm "${STATE_DIRECTORY}/.plotTransport${3}"
+}
+
+isTransportInProgress() {
+  [[ ! -z $(ps aux | grep "[^]]rsync" | grep "[^]]${1}") ]] && echo 1 || echo 0
+}
+
+mkdir -p "${STATE_DIRECTORY}"
+
+numberOfTargetDirectories=$(( ${#TARGET_DIRECTORIES[@]} - 1 ))
+
+for target in $(seq 0 $numberOfTargetDirectories)
+do
+
+    [[ ! $(find "${STATE_DIRECTORY}" -name '.plotTransport*' | wc -l) \
+            < ${CONCURRENT_TRANSPORTS_LIMIT:-32} ]] \
+        && echo "Number of concurrent transports has reached limit, will not start more transports now." \
+        && exit 0
+
+    sourceFile=$(findReadyPlot)
+    [[ -z $sourceFile ]] && echo "No source files ready, nothing to do." && exit 0
+
+    targetDirectory="${TARGET_DIRECTORIES[target]}"
+
+    blocksFreeOnTargetDirectory=$(df "${targetDirectory}" | grep / | awk '{print $4}')
+    bytesFreeOnTargetDirectory=$((blocksFreeOnTargetDirectory * 1024))
+    sizeOfSourceFile=$(ls -al "${sourceFile}" | awk '{print $5}')
+
+    [[ $sizeOfSourceFile > $bytesFreeOnTargetDirectory ]] \
+        && echo "No space left on target directory ${targetDirectory}"
+
+    [[ $sizeOfSourceFile < $bytesFreeOnTargetDirectory \
+        && ! -f "${STATE_DIRECTORY}/.plotTransport${target}" ]] \
+        && transportPlot "${sourceFile}" "${targetDirectory}" "${target}" &
+    sleep 1
+done
