@@ -39,9 +39,11 @@ isTransportInProgress() {
   [[ ! -z $(ps aux | grep "[^]]rsync" | grep "[^]]${1}") ]] && echo 1 || echo 0
 }
 
+numberOfTargetDirectories=$(( ${#TARGET_DIRECTORIES[@]} - 1 ))
+
 mkdir -p "${STATE_DIRECTORY}"
 
-numberOfTargetDirectories=$(( ${#TARGET_DIRECTORIES[@]} - 1 ))
+[[ ! -d ${SOURCE_DIRECTORY} ]] && echo "Source directory is not available: ${SOURCE_DIRECTORY}" && exit 1
 
 for target in $(seq 0 $numberOfTargetDirectories)
 do
@@ -56,15 +58,21 @@ do
 
     targetDirectory="${TARGET_DIRECTORIES[target]}"
 
-    blocksFreeOnTargetDirectory=$(df "${targetDirectory}" | grep / | awk '{print $4}')
-    bytesFreeOnTargetDirectory=$((blocksFreeOnTargetDirectory * 1024))
-    sizeOfSourceFile=$(ls -al "${sourceFile}" | awk '{print $5}')
+    if [[ -d ${targetDirectory} ]]; then
 
-    [[ $sizeOfSourceFile > $bytesFreeOnTargetDirectory ]] \
-        && echo "No space left on target directory ${targetDirectory}"
+        blocksFreeOnTargetDirectory=$(df "${targetDirectory}" | grep / | awk '{print $4}')
+        bytesFreeOnTargetDirectory=$((blocksFreeOnTargetDirectory * 1024))
+        sizeOfSourceFile=$(ls -al "${sourceFile}" | awk '{print $5}')
 
-    [[ $sizeOfSourceFile < $bytesFreeOnTargetDirectory \
-        && ! -f "${STATE_DIRECTORY}/.plotTransport${target}" ]] \
-        && transportPlot "${sourceFile}" "${targetDirectory}" "${target}" &
-    sleep 1
+        [[ $sizeOfSourceFile > $bytesFreeOnTargetDirectory ]] \
+            && echo "No space left on target directory ${targetDirectory}"
+
+        [[ $sizeOfSourceFile < $bytesFreeOnTargetDirectory \
+            && ! -f "${STATE_DIRECTORY}/.plotTransport${target}" ]] \
+            && transportPlot "${sourceFile}" "${targetDirectory}" "${target}" &
+
+        sleep 1
+    else
+        echo "Target directory #${target} is not available: ${targetDirectory}"
+    fi
 done
